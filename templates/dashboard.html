@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>RAPTOR | Predictive Cyber Defence</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+
+</head>
+
+
+<body>
+
+
+    <!-- =====================================================
+         TOP NAVIGATION
+    ====================================================== -->
+
+    <header class="topbar">
+
+        <div class="brand">
+
+            <div class="brand-mark">
+                R
+            </div>
+
+            <div class="brand-text">
+
+                <div class="brand-name">
+                    RAPTOR
+                </div>
+
+                <div class="brand-subtitle">
+                    Predictive Cyber Defence
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="system-info">
+
+            <div class="mode-badge">
+                <span class="status-dot"></span>
+                REPLAY MODE
+            </div>
+
+            <div class="model-badge">
+                LSTM WORLD MODEL
+            </div>
+
+        </div>
+
+    </header>
+
+
+
+    <!-- =====================================================
+         MAIN DASHBOARD
+    ====================================================== -->
+
+    <main class="dashboard">
+
+
+        <!-- =================================================
+             CURRENT THREAT
+        ================================================== -->
+
+        <section class="hero-panel">
+
+            <div class="panel-label">
+                CURRENT THREAT STATUS
+            </div>
+
+            <div
+                id="threat-status"
+                class="threat-status"
+            >
+                LOW RISK
+            </div>
+
+            <div class="threat-description">
+                RAPTOR is continuously forecasting the next
+                network state from temporal behaviour.
+            </div>
+
+        </section>
+
+
+
+        <!-- =================================================
+             METRICS
+        ================================================== -->
+
+        <section class="metrics-grid">
+
+
+            <!-- ATTACK PROBABILITY -->
+
+            <div class="metric-card">
+
+                <div class="metric-label">
+                    ATTACK PROBABILITY
+                </div>
+
+                <div
+                    id="attack-probability"
+                    class="metric-value"
+                >
+                    --
+                </div>
+
+                <div class="metric-description">
+                    Predicted likelihood of malicious activity
+                </div>
+
+            </div>
+
+
+
+            <!-- ATTACK RATIO -->
+
+            <div class="metric-card">
+
+                <div class="metric-label">
+                    ATTACK RATIO
+                </div>
+
+                <div
+                    id="attack-ratio"
+                    class="metric-value"
+                >
+                    --
+                </div>
+
+                <div class="metric-description">
+                    Estimated malicious traffic proportion
+                </div>
+
+            </div>
+
+
+
+            <!-- ATTACK STAGE -->
+
+            <div class="metric-card">
+
+                <div class="metric-label">
+                    ATTACK STAGE
+                </div>
+
+                <div
+                    id="attack-stage"
+                    class="metric-value"
+                >
+                    --
+                </div>
+
+                <div class="metric-description">
+                    Predicted MITRE-aligned attack stage
+                </div>
+
+            </div>
+
+
+
+            <!-- STAGE CONFIDENCE -->
+
+            <div class="metric-card">
+
+                <div class="metric-label">
+                    STAGE CONFIDENCE
+                </div>
+
+                <div
+                    id="stage-confidence"
+                    class="metric-value"
+                >
+                    --
+                </div>
+
+                <div class="metric-description">
+                    Model confidence in predicted stage
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =================================================
+             NEXT STATE FORECAST
+        ================================================== -->
+
+        <section class="panel forecast-panel">
+
+
+            <div class="panel-header">
+
+                <div>
+
+                    <div class="panel-title">
+                        NEXT STATE FORECAST
+                    </div>
+
+                    <div class="panel-subtitle">
+                        One-step-ahead temporal prediction
+                    </div>
+
+                </div>
+
+
+                <div class="forecast-time">
+
+                    <span>
+                        NETWORK TIME
+                    </span>
+
+                    <strong id="forecast-time">
+                        --:--:--
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+
+            <div class="forecast-content">
+
+
+                <div class="forecast-line">
+
+
+                    <!-- CURRENT STATE -->
+
+                    <div class="forecast-node current-node">
+
+                        <span class="node-number">
+                            t
+                        </span>
+
+                        <span class="node-label">
+                            CURRENT STATE
+                        </span>
+
+                    </div>
+
+
+                    <div class="forecast-arrow">
+                        →
+                    </div>
+
+
+                    <!-- FORECAST STATE -->
+
+                    <div class="forecast-node future-node">
+
+                        <span class="node-number">
+                            t+1
+                        </span>
+
+                        <span class="node-label">
+                            FORECAST STATE
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="forecast-note">
+
+                    RAPTOR uses the previous 20 temporal network
+                    states to estimate the next network state
+                    and associated attack risk.
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =================================================
+             TEMPORAL REPLAY
+        ================================================== -->
+
+        <section class="panel replay-panel">
+
+
+            <div class="panel-header">
+
+                <div>
+
+                    <div class="panel-title">
+                        TEMPORAL REPLAY
+                    </div>
+
+                    <div class="panel-subtitle">
+                        CSE-CIC-IDS2018 • 02-14-2018
+                    </div>
+
+                </div>
+
+
+                <div class="replay-indicator">
+
+                    <span class="status-dot"></span>
+
+                    REPLAY DATA
+
+                </div>
+
+            </div>
+
+
+
+            <!-- REPLAY BUTTONS -->
+
+            <div class="replay-controls">
+
+
+                <button
+                    id="play-button"
+                    class="replay-button primary"
+                    onclick="toggleReplay()"
+                >
+                    ▶ PLAY
+                </button>
+
+
+                <button
+                    class="replay-button"
+                    onclick="stepReplay(-10)"
+                >
+                    ◀ −10
+                </button>
+
+
+                <button
+                    class="replay-button"
+                    onclick="stepReplay(10)"
+                >
+                    +10 ▶
+                </button>
+
+
+                <button
+                    class="replay-button alert-button"
+                    onclick="jumpToNextAlert()"
+                >
+                    ⚠ NEXT RAPTOR ALERT
+                </button>
+
+            </div>
+
+
+
+            <!-- SPEED -->
+
+            <div class="speed-controls">
+
+                <span class="speed-label">
+                    SPEED
+                </span>
+
+
+                <button
+                    class="speed-button active"
+                    data-speed="1"
+                    onclick="setReplaySpeed(1)"
+                >
+                    1×
+                </button>
+
+
+                <button
+                    class="speed-button"
+                    data-speed="5"
+                    onclick="setReplaySpeed(5)"
+                >
+                    5×
+                </button>
+
+
+                <button
+                    class="speed-button"
+                    data-speed="20"
+                    onclick="setReplaySpeed(20)"
+                >
+                    20×
+                </button>
+
+            </div>
+
+
+
+            <!-- TIMELINE -->
+
+            <div class="timeline-container">
+
+                <div class="timeline-labels">
+
+                    <span>
+                        EARLY REPLAY
+                    </span>
+
+                    <span>
+                        ATTACK FORECAST
+                    </span>
+
+                    <span>
+                        LATE REPLAY
+                    </span>
+
+                </div>
+
+
+                <input
+                    id="replay-slider"
+                    class="replay-slider"
+                    type="range"
+                    min="0"
+                    max="6488"
+                    value="0"
+                >
+
+
+                <div class="timeline-info">
+
+                    <span>
+                        20-state temporal context
+                    </span>
+
+                    <span
+                        id="replay-position"
+                        class="replay-position"
+                    >
+                        1 / 6489
+                    </span>
+
+                    <span>
+                        5-second windows
+                    </span>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =================================================
+             RAPTOR PIPELINE
+        ================================================== -->
+
+        <section class="panel pipeline-panel">
+
+
+            <div class="panel-title">
+                RAPTOR PIPELINE
+            </div>
+
+
+            <div class="pipeline">
+
+
+                <!-- OBSERVE -->
+
+                <div class="pipeline-step">
+
+                    <div class="pipeline-number">
+                        01
+                    </div>
+
+                    <div class="pipeline-name">
+                        OBSERVE
+                    </div>
+
+                    <div class="pipeline-description">
+                        Network traffic telemetry
+                    </div>
+
+                </div>
+
+
+                <div class="pipeline-connector">
+                    →
+                </div>
+
+
+                <!-- REPRESENT -->
+
+                <div class="pipeline-step">
+
+                    <div class="pipeline-number">
+                        02
+                    </div>
+
+                    <div class="pipeline-name">
+                        REPRESENT
+                    </div>
+
+                    <div class="pipeline-description">
+                        Temporal network states
+                    </div>
+
+                </div>
+
+
+                <div class="pipeline-connector">
+                    →
+                </div>
+
+
+                <!-- LEARN -->
+
+                <div class="pipeline-step active">
+
+                    <div class="pipeline-number">
+                        03
+                    </div>
+
+                    <div class="pipeline-name">
+                        LEARN
+                    </div>
+
+                    <div class="pipeline-description">
+                        LSTM temporal dynamics
+                    </div>
+
+                </div>
+
+
+                <div class="pipeline-connector">
+                    →
+                </div>
+
+
+                <!-- FORECAST -->
+
+                <div class="pipeline-step active">
+
+                    <div class="pipeline-number">
+                        04
+                    </div>
+
+                    <div class="pipeline-name">
+                        FORECAST
+                    </div>
+
+                    <div class="pipeline-description">
+                        Future attack state
+                    </div>
+
+                </div>
+
+
+                <div class="pipeline-connector">
+                    →
+                </div>
+
+
+                <!-- ACT -->
+
+                <div class="pipeline-step">
+
+                    <div class="pipeline-number">
+                        05
+                    </div>
+
+                    <div class="pipeline-name">
+                        ACT
+                    </div>
+
+                    <div class="pipeline-description">
+                        Explainable decision support
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =================================================
+             FOOTER
+        ================================================== -->
+
+        <footer class="dashboard-footer">
+
+            <div>
+                RAPTOR • Predictive Cyber Defence
+            </div>
+
+            <div>
+                Decision Support • Not Autonomous Prevention
+            </div>
+
+        </footer>
+
+
+    </main>
+
+
+
+    <!-- =====================================================
+         JAVASCRIPT
+    ====================================================== -->
+
+    <script
+        src="{{ url_for('static', filename='js/dashboard.js') }}"
+    ></script>
+
+
+</body>
+
+</html>
