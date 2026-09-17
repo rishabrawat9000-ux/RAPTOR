@@ -1,29 +1,38 @@
+// ============================================================
+// RAPTOR DASHBOARD
+// Replay + Rolling Five-Step Forecast
+// ============================================================
+
 let replayData = [];
 let currentIndex = 0;
+
 let replayTimer = null;
 let replaySpeed = 1;
 
-// =====================================================
-// RAPTOR ALERT THRESHOLD
-// =====================================================
+// Forecast request state
+let forecastInFlight = false;
+let pendingForecastIndex = null;
 
+// Tuned alert threshold
 const RAPTOR_THRESHOLD = 0.05;
 
 
-// =====================================================
-// LOAD REPLAY
-// =====================================================
+// ============================================================
+// LOAD REPLAY DATA
+// ============================================================
 
 async function loadReplay() {
 
-    console.log("RAPTOR: Loading replay...");
+    console.log("RAPTOR: Loading replay data...");
 
     try {
 
         const response = await fetch("/api/replay");
 
         if (!response.ok) {
-            throw new Error("Replay API failed");
+            throw new Error(
+                `Replay API returned ${response.status}`
+            );
         }
 
         const data = await response.json();
@@ -31,18 +40,34 @@ async function loadReplay() {
         replayData = data.predictions || [];
 
         console.log(
-            "RAPTOR replay loaded:",
-            replayData.length,
-            "predictions"
+            "RAPTOR: Replay states loaded:",
+            replayData.length
         );
 
+
         if (replayData.length === 0) {
+
+            console.warn(
+                "RAPTOR: No replay data available."
+            );
+
             return;
         }
 
+
+        // Setup slider
         setupTimeline();
 
-        updateDashboard(replayData[0]);
+
+        // Start from first state
+        currentIndex = 0;
+
+
+        // Display first state
+        updateDashboard(
+            replayData[currentIndex]
+        );
+
 
     } catch (error) {
 
@@ -50,68 +75,175 @@ async function loadReplay() {
             "RAPTOR replay error:",
             error
         );
+
+        const position =
+            document.getElementById(
+                "replay-position"
+            );
+
+        if (position) {
+            position.textContent =
+                "Replay unavailable";
+        }
     }
 }
 
 
-// =====================================================
-// UPDATE DASHBOARD
-// =====================================================
+// ============================================================
+// UPDATE CURRENT DASHBOARD
+// ============================================================
 
 function updateDashboard(prediction) {
 
+    if (!prediction) {
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // Attack probability
+    // --------------------------------------------------------
+
     const attackProbability =
-        Number(prediction.attack_probability || 0);
+        Number(
+            prediction.attack_probability || 0
+        );
+
+
+    // --------------------------------------------------------
+    // Attack ratio
+    // --------------------------------------------------------
 
     const attackRatio =
-        Number(prediction.attack_ratio || 0);
+        Number(
+            prediction.attack_ratio || 0
+        );
+
+
+    // --------------------------------------------------------
+    // Stage confidence
+    // --------------------------------------------------------
 
     const confidence =
-        Number(prediction.stage_confidence || 0);
+        Number(
+            prediction.stage_confidence || 0
+        );
 
 
-    document.getElementById(
-        "attack-probability"
-    ).textContent =
-        (attackProbability * 100).toFixed(2) + "%";
+    // --------------------------------------------------------
+    // Attack probability card
+    // --------------------------------------------------------
+
+    const probabilityElement =
+        document.getElementById(
+            "attack-probability"
+        );
 
 
-    document.getElementById(
-        "attack-ratio"
-    ).textContent =
-        (attackRatio * 100).toFixed(2) + "%";
+    if (probabilityElement) {
+
+        probabilityElement.textContent =
+            (attackProbability * 100).toFixed(2) + "%";
+    }
 
 
-    document.getElementById(
-        "attack-stage"
-    ).textContent =
-        prediction.attack_stage || "Unknown";
+    // --------------------------------------------------------
+    // Attack ratio card
+    // --------------------------------------------------------
+
+    const ratioElement =
+        document.getElementById(
+            "attack-ratio"
+        );
 
 
-    document.getElementById(
-        "stage-confidence"
-    ).textContent =
-        (confidence * 100).toFixed(2) + "%";
+    if (ratioElement) {
+
+        ratioElement.textContent =
+            (attackRatio * 100).toFixed(2) + "%";
+    }
 
 
-    document.getElementById(
-        "forecast-time"
-    ).textContent =
-        formatTime(prediction.time_window);
+    // --------------------------------------------------------
+    // Attack stage card
+    // --------------------------------------------------------
 
+    const stageElement =
+        document.getElementById(
+            "attack-stage"
+        );
+
+
+    if (stageElement) {
+
+        stageElement.textContent =
+            prediction.attack_stage || "Unknown";
+    }
+
+
+    // --------------------------------------------------------
+    // Stage confidence card
+    // --------------------------------------------------------
+
+    const confidenceElement =
+        document.getElementById(
+            "stage-confidence"
+        );
+
+
+    if (confidenceElement) {
+
+        confidenceElement.textContent =
+            (confidence * 100).toFixed(2) + "%";
+    }
+
+
+    // --------------------------------------------------------
+    // Network time
+    // --------------------------------------------------------
+
+    const forecastTimeElement =
+        document.getElementById(
+            "forecast-time"
+        );
+
+
+    if (forecastTimeElement) {
+
+        forecastTimeElement.textContent =
+            formatTime(
+                prediction.time_window
+            );
+    }
+
+
+    // --------------------------------------------------------
+    // Threat status
+    // --------------------------------------------------------
 
     updateThreatStatus(
         attackProbability
     );
 
 
+    // --------------------------------------------------------
+    // Replay position
+    // --------------------------------------------------------
+
     updateReplayPosition();
+
+
+    // --------------------------------------------------------
+    // Five-step forecast
+    // --------------------------------------------------------
+
+    loadForecast(currentIndex);
 }
 
 
-// =====================================================
+// ============================================================
 // THREAT STATUS
-// =====================================================
+// ============================================================
 
 function updateThreatStatus(probability) {
 
@@ -120,82 +252,413 @@ function updateThreatStatus(probability) {
             "threat-status"
         );
 
+
     if (!status) {
         return;
     }
 
 
-    // High-risk condition
     if (probability >= 0.70) {
 
-        status.textContent = "HIGH RISK";
-        status.style.color = "#ff6b6b";
+        status.textContent =
+            "HIGH RISK";
+
+        status.style.color =
+            "#ff6b6b";
 
     }
 
-    // Elevated condition
     else if (probability >= 0.30) {
 
-        status.textContent = "ELEVATED";
-        status.style.color = "#e8c66d";
+        status.textContent =
+            "ELEVATED";
+
+        status.style.color =
+            "#e8c66d";
 
     }
 
-    // RAPTOR early-warning threshold
     else if (probability >= RAPTOR_THRESHOLD) {
 
-        status.textContent = "RAPTOR ALERT";
-        status.style.color = "#e8c66d";
+        status.textContent =
+            "EARLY WARNING";
+
+        status.style.color =
+            "#e8c66d";
 
     }
 
-    // Below alert threshold
     else {
 
-        status.textContent = "LOW RISK";
-        status.style.color = "#70d99a";
+        status.textContent =
+            "LOW RISK";
+
+        status.style.color =
+            "#70d99a";
     }
 }
 
 
-// =====================================================
-// PLAY / PAUSE
-// =====================================================
+// ============================================================
+// LOAD FIVE-STEP FORECAST
+// ============================================================
+
+async function loadForecast(index) {
+
+    if (
+        replayData.length === 0 ||
+        index < 0
+    ) {
+        return;
+    }
+
+
+    // Always keep the newest requested index
+    pendingForecastIndex = index;
+
+
+    /*
+     * If another forecast is already running,
+     * don't start another request.
+     *
+     * The newest index will be processed after
+     * the current request finishes.
+     */
+
+    if (forecastInFlight) {
+        return;
+    }
+
+
+    forecastInFlight = true;
+
+
+    while (
+        pendingForecastIndex !== null
+    ) {
+
+        const forecastIndex =
+            pendingForecastIndex;
+
+
+        pendingForecastIndex = null;
+
+
+        console.log(
+            "RAPTOR: Requesting forecast:",
+            forecastIndex
+        );
+
+
+        try {
+
+            const response =
+                await fetch(
+                    `/api/forecast/${forecastIndex}`
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    `Forecast API returned ${response.status}`
+                );
+            }
+
+
+            const data =
+                await response.json();
+
+
+            /*
+             * Only render a forecast if it is still
+             * relevant enough.
+             *
+             * If replay has moved several states ahead,
+             * the loop below will immediately request
+             * the newest position.
+             */
+
+            renderForecast(
+                data.forecast || []
+            );
+
+
+            console.log(
+                "RAPTOR: Forecast rendered:",
+                forecastIndex
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "RAPTOR forecast error:",
+                error
+            );
+
+
+            const container =
+                document.getElementById(
+                    "forecast-container"
+                );
+
+
+            if (container) {
+
+                container.innerHTML = `
+                    <div class="forecast-error">
+                        Unable to load forecast
+                    </div>
+                `;
+            }
+        }
+
+
+        /*
+         * If replay moved while the request was
+         * executing, pendingForecastIndex now contains
+         * the latest replay position.
+         *
+         * The while loop will process it.
+         */
+    }
+
+
+    forecastInFlight = false;
+}
+
+
+// ============================================================
+// RENDER FIVE-STEP FORECAST
+// ============================================================
+
+function renderForecast(forecast) {
+
+    const container =
+        document.getElementById(
+            "forecast-container"
+        );
+
+
+    if (!container) {
+
+        console.error(
+            "RAPTOR: forecast-container not found."
+        );
+
+        return;
+    }
+
+
+    if (
+        !forecast ||
+        forecast.length === 0
+    ) {
+
+        container.innerHTML = `
+            <div class="forecast-error">
+                No forecast available
+            </div>
+        `;
+
+        return;
+    }
+
+
+    container.innerHTML =
+        forecast
+            .map(item => {
+
+                const probability =
+                    Number(
+                        item.attack_probability || 0
+                    ) * 100;
+
+
+                const ratio =
+                    Number(
+                        item.attack_ratio || 0
+                    ) * 100;
+
+
+                const confidence =
+                    Number(
+                        item.stage_confidence || 0
+                    ) * 100;
+
+
+                const stage =
+                    item.attack_stage ||
+                    "Unknown";
+
+
+                const step =
+                    item.step ||
+                    0;
+
+
+                return `
+
+                    <div class="forecast-card">
+
+                        <div class="forecast-step">
+                            T+${step}
+                        </div>
+
+
+                        <div class="forecast-time">
+                            ${formatTime(item.time_window)}
+                        </div>
+
+
+                        <div class="forecast-row">
+
+                            <span>
+                                ATTACK PROBABILITY
+                            </span>
+
+                            <strong>
+                                ${probability.toFixed(2)}%
+                            </strong>
+
+                        </div>
+
+
+                        <div class="forecast-row">
+
+                            <span>
+                                STAGE
+                            </span>
+
+                            <strong>
+                                ${stage}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="forecast-row">
+
+                            <span>
+                                ATTACK RATIO
+                            </span>
+
+                            <strong>
+                                ${ratio.toFixed(2)}%
+                            </strong>
+
+                        </div>
+
+
+                        <div class="forecast-row">
+
+                            <span>
+                                CONFIDENCE
+                            </span>
+
+                            <strong>
+                                ${confidence.toFixed(2)}%
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                `;
+
+            })
+            .join("");
+}
+
+
+// ============================================================
+// START REPLAY
+// ============================================================
 
 function startReplay() {
 
     stopReplay();
 
-    replayTimer = setInterval(() => {
 
-        if (currentIndex >= replayData.length - 1) {
+    if (replayData.length === 0) {
 
-            stopReplay();
-
-            setPlayButton("▶ PLAY");
-
-            return;
-        }
-
-        currentIndex++;
-
-        updateDashboard(
-            replayData[currentIndex]
+        console.warn(
+            "RAPTOR: Cannot start replay. No data."
         );
 
-    }, 1000 / replaySpeed);
+        return;
+    }
+
+
+    replayTimer =
+        setInterval(() => {
+
+
+            // End of replay
+
+            if (
+                currentIndex >=
+                replayData.length - 1
+            ) {
+
+                stopReplay();
+
+                setPlayButton(
+                    "▶ PLAY"
+                );
+
+                return;
+            }
+
+
+            // Move one temporal state forward
+
+            currentIndex++;
+
+
+            console.log(
+                "RAPTOR replay:",
+                currentIndex,
+                replayData[
+                    currentIndex
+                ]?.time_window
+            );
+
+
+            // Update dashboard immediately
+
+            updateDashboard(
+                replayData[
+                    currentIndex
+                ]
+            );
+
+
+        }, 1000 / replaySpeed);
 }
 
+
+// ============================================================
+// STOP REPLAY
+// ============================================================
 
 function stopReplay() {
 
     if (replayTimer) {
 
-        clearInterval(replayTimer);
+        clearInterval(
+            replayTimer
+        );
+
         replayTimer = null;
     }
 }
 
+
+// ============================================================
+// PLAY / PAUSE
+// ============================================================
 
 function toggleReplay() {
 
@@ -203,16 +666,26 @@ function toggleReplay() {
 
         stopReplay();
 
-        setPlayButton("▶ PLAY");
+        setPlayButton(
+            "▶ PLAY"
+        );
 
-    } else {
+    }
+
+    else {
 
         startReplay();
 
-        setPlayButton("⏸ PAUSE");
+        setPlayButton(
+            "⏸ PAUSE"
+        );
     }
 }
 
+
+// ============================================================
+// PLAY BUTTON
+// ============================================================
 
 function setPlayButton(text) {
 
@@ -221,43 +694,74 @@ function setPlayButton(text) {
             "play-button"
         );
 
+
     if (button) {
-        button.textContent = text;
+
+        button.textContent =
+            text;
     }
 }
 
 
-// =====================================================
-// SPEED
-// =====================================================
+// ============================================================
+// REPLAY SPEED
+// ============================================================
 
 function setReplaySpeed(speed) {
 
-    replaySpeed = speed;
+    replaySpeed =
+        Number(speed);
+
+
+    console.log(
+        "RAPTOR: Replay speed:",
+        replaySpeed + "x"
+    );
+
+
+    /*
+     * Restart timer using the new speed.
+     */
 
     if (replayTimer) {
+
         startReplay();
     }
 
-    document.querySelectorAll(
-        ".speed-button"
-    ).forEach(button => {
 
-        button.classList.remove("active");
+    /*
+     * Update active button.
+     */
 
-        if (
-            Number(button.dataset.speed)
-            === speed
-        ) {
-            button.classList.add("active");
-        }
-    });
+    document
+        .querySelectorAll(
+            ".speed-button"
+        )
+        .forEach(button => {
+
+            button.classList.remove(
+                "active"
+            );
+
+
+            if (
+                Number(
+                    button.dataset.speed
+                ) === replaySpeed
+            ) {
+
+                button.classList.add(
+                    "active"
+                );
+            }
+
+        });
 }
 
 
-// =====================================================
-// TIMELINE
-// =====================================================
+// ============================================================
+// SETUP REPLAY SLIDER
+// ============================================================
 
 function setupTimeline() {
 
@@ -266,32 +770,70 @@ function setupTimeline() {
             "replay-slider"
         );
 
+
     if (!slider) {
+
+        console.warn(
+            "RAPTOR: replay-slider not found."
+        );
+
         return;
     }
 
+
     slider.min = 0;
 
+
     slider.max =
-        replayData.length - 1;
+        Math.max(
+            0,
+            replayData.length - 1
+        );
 
-    slider.value = 0;
+
+    slider.value =
+        currentIndex;
 
 
-    slider.addEventListener(
-        "input",
+    /*
+     * Use oninput instead of addEventListener
+     * so duplicate handlers are impossible.
+     */
+
+    slider.oninput =
         function () {
 
             currentIndex =
-                Number(this.value);
+                Number(
+                    this.value
+                );
 
-            updateDashboard(
-                replayData[currentIndex]
+
+            console.log(
+                "RAPTOR: Slider moved:",
+                currentIndex
             );
-        }
-    );
+
+
+            if (
+                replayData[
+                    currentIndex
+                ]
+            ) {
+
+                updateDashboard(
+                    replayData[
+                        currentIndex
+                    ]
+                );
+            }
+        };
 }
 
+
+// ============================================================
+// UPDATE REPLAY POSITION
+// ============================================================
 
 function updateReplayPosition() {
 
@@ -300,6 +842,7 @@ function updateReplayPosition() {
             "replay-slider"
         );
 
+
     const position =
         document.getElementById(
             "replay-position"
@@ -307,7 +850,9 @@ function updateReplayPosition() {
 
 
     if (slider) {
-        slider.value = currentIndex;
+
+        slider.value =
+            currentIndex;
     }
 
 
@@ -319,18 +864,27 @@ function updateReplayPosition() {
 }
 
 
-// =====================================================
-// STEP FORWARD / BACKWARD
-// =====================================================
+// ============================================================
+// STEP REPLAY
+// ============================================================
 
 function stepReplay(amount) {
 
-    if (replayData.length === 0) {
+    if (
+        replayData.length === 0
+    ) {
+
         return;
     }
 
-    currentIndex += amount;
 
+    currentIndex +=
+        Number(amount);
+
+
+    /*
+     * Keep index inside valid range.
+     */
 
     currentIndex =
         Math.max(
@@ -342,30 +896,41 @@ function stepReplay(amount) {
         );
 
 
+    console.log(
+        "RAPTOR: Manual step:",
+        currentIndex
+    );
+
+
     updateDashboard(
-        replayData[currentIndex]
+        replayData[
+            currentIndex
+        ]
     );
 }
 
 
-// =====================================================
+// ============================================================
 // JUMP TO NEXT RAPTOR ALERT
-// =====================================================
+// ============================================================
 
 function jumpToNextAlert() {
 
-    if (replayData.length === 0) {
+    if (
+        replayData.length === 0
+    ) {
+
         return;
     }
 
 
-    const start =
-        currentIndex + 1;
+    console.log(
+        "RAPTOR: Searching for next alert..."
+    );
 
 
-    // Search after current position
     for (
-        let i = start;
+        let i = currentIndex + 1;
         i < replayData.length;
         i++
     ) {
@@ -377,41 +942,28 @@ function jumpToNextAlert() {
             );
 
 
-        if (probability >= RAPTOR_THRESHOLD) {
+        if (
+            probability >=
+            RAPTOR_THRESHOLD
+        ) {
 
             currentIndex = i;
 
-            updateDashboard(
-                replayData[currentIndex]
+
+            console.log(
+                "RAPTOR: Next alert found:",
+                currentIndex,
+                replayData[i].time_window,
+                probability
             );
 
-            return;
-        }
-    }
-
-
-    // If no later alert exists,
-    // search from the beginning
-    for (
-        let i = 0;
-        i < start && i < replayData.length;
-        i++
-    ) {
-
-        const probability =
-            Number(
-                replayData[i]
-                    .attack_probability || 0
-            );
-
-
-        if (probability >= RAPTOR_THRESHOLD) {
-
-            currentIndex = i;
 
             updateDashboard(
-                replayData[currentIndex]
+                replayData[
+                    currentIndex
+                ]
             );
+
 
             return;
         }
@@ -419,53 +971,152 @@ function jumpToNextAlert() {
 
 
     console.log(
-        "No RAPTOR alerts found."
+        "RAPTOR: No further alerts found."
     );
 }
 
 
-// =====================================================
-// TIME
-// =====================================================
+// ============================================================
+// FORMAT TIMESTAMP
+// ============================================================
 
 function formatTime(timestamp) {
 
-    if (!timestamp) {
+    if (
+        !timestamp ||
+        timestamp === "nan" ||
+        timestamp === "NaT" ||
+        timestamp === "null" ||
+        timestamp === "undefined"
+    ) {
+
         return "--:--:--";
     }
 
 
+    const value =
+        String(timestamp);
+
+
+    /*
+     * Example:
+     *
+     * 2018-02-14 01:01:40
+     *
+     * becomes:
+     *
+     * 01:01:40
+     */
+
     const parts =
-        timestamp.split(" ");
+        value.split(" ");
 
 
-    if (parts.length < 2) {
-        return timestamp;
+    if (
+        parts.length >= 2
+    ) {
+
+        return parts[1];
     }
 
 
-    return parts[1];
+    return value;
 }
 
 
-// =====================================================
-// INITIALIZE
-// =====================================================
+// ============================================================
+// KEYBOARD CONTROLS
+// ============================================================
+
+document.addEventListener(
+    "keydown",
+    function (event) {
+
+
+        // Space = Play / Pause
+
+        if (
+            event.code ===
+            "Space"
+        ) {
+
+            /*
+             * Don't interfere with text inputs.
+             */
+
+            if (
+                event.target.tagName ===
+                    "INPUT" ||
+                event.target.tagName ===
+                    "TEXTAREA"
+            ) {
+
+                return;
+            }
+
+
+            event.preventDefault();
+
+
+            toggleReplay();
+        }
+
+
+        // Arrow Right = next state
+
+        if (
+            event.code ===
+            "ArrowRight"
+        ) {
+
+            stepReplay(1);
+        }
+
+
+        // Arrow Left = previous state
+
+        if (
+            event.code ===
+            "ArrowLeft"
+        ) {
+
+            stepReplay(-1);
+        }
+
+    }
+);
+
+
+// ============================================================
+// INITIALIZE DASHBOARD
+// ============================================================
 
 document.addEventListener(
     "DOMContentLoaded",
-    () => {
+    function () {
 
         console.log(
-            "RAPTOR dashboard loaded."
+            "===================================="
         );
 
         console.log(
-            "RAPTOR alert threshold:",
+            "RAPTOR Dashboard Loaded"
+        );
+
+        console.log(
+            "Replay + Five-Step Forecast"
+        );
+
+        console.log(
+            "Alert Threshold:",
             RAPTOR_THRESHOLD
         );
 
-        loadReplay();
+        console.log(
+            "===================================="
+        );
 
+
+        loadReplay();
     }
 );

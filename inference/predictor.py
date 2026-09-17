@@ -4,11 +4,15 @@ import joblib
 import tensorflow as tf
 
 
-# ============================================================
-# Paths
-# ============================================================
+# =====================================================
+# PATHS
+# =====================================================
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
 
 MODEL_PATH = os.path.join(
     BASE_DIR,
@@ -32,128 +36,387 @@ ENCODER_PATH = os.path.join(
 )
 
 
-# ============================================================
-# Load RAPTOR artifacts
-# ============================================================
+# =====================================================
+# LOAD RAPTOR MODEL
+# =====================================================
 
 print("Loading RAPTOR model...")
 
-model = tf.keras.models.load_model(MODEL_PATH)
+model = tf.keras.models.load_model(
+    MODEL_PATH
+)
 
-scaler = joblib.load(SCALER_PATH)
 
-stage_encoder = joblib.load(ENCODER_PATH)
+# =====================================================
+# LOAD SCALER
+# =====================================================
+
+scaler = joblib.load(
+    SCALER_PATH
+)
+
+
+# =====================================================
+# LOAD STAGE ENCODER
+# =====================================================
+
+stage_encoder = joblib.load(
+    ENCODER_PATH
+)
+
 
 print("RAPTOR model loaded.")
-print("Scaler:", type(scaler).__name__)
-print("Stage classes:", stage_encoder.classes_)
+
+print(
+    "Scaler:",
+    type(scaler).__name__
+)
+
+print(
+    "Scaler features:",
+    scaler.n_features_in_
+)
+
+print(
+    "Stage classes:",
+    stage_encoder.classes_
+)
 
 
-# ============================================================
-# Prediction function
-# ============================================================
+# =====================================================
+# SINGLE STATE PREDICTION
+# =====================================================
 
 def predict_state(sequence):
-    """
-    Predict the next network state and attack-related outputs.
 
-    Parameters
-    ----------
-    sequence : array-like
-        Shape must be (20, 27)
+    sequence = np.asarray(
+        sequence,
+        dtype=np.float32
+    )
 
-    Returns
-    -------
-    dict
-        RAPTOR prediction results.
-    """
-
-    sequence = np.asarray(sequence, dtype=np.float32)
-
-    # --------------------------------------------------------
-    # Validate input
-    # --------------------------------------------------------
 
     if sequence.shape != (20, 27):
+
         raise ValueError(
-            f"Expected sequence shape (20, 27), "
+            f"Expected sequence shape (20,27), "
             f"got {sequence.shape}"
         )
 
-    # --------------------------------------------------------
-    # Scale each temporal state
-    # --------------------------------------------------------
+
+    # -------------------------------------------------
+    # SCALE
+    # -------------------------------------------------
 
     original_shape = sequence.shape
 
-    sequence_2d = sequence.reshape(-1, 27)
+    sequence_2d = sequence.reshape(
+        -1,
+        27
+    )
 
-    sequence_scaled = scaler.transform(sequence_2d)
+    sequence_scaled = scaler.transform(
+        sequence_2d
+    )
 
-    sequence_scaled = sequence_scaled.reshape(original_shape)
+    sequence_scaled = (
+        sequence_scaled
+        .reshape(original_shape)
+    )
 
-    # --------------------------------------------------------
-    # Add batch dimension
-    # --------------------------------------------------------
 
-    model_input = np.expand_dims(sequence_scaled, axis=0)
+    # -------------------------------------------------
+    # MODEL INPUT
+    # -------------------------------------------------
 
-    # Shape:
-    # (1, 20, 27)
+    model_input = np.expand_dims(
+        sequence_scaled,
+        axis=0
+    )
 
-    # --------------------------------------------------------
-    # Model inference
-    # --------------------------------------------------------
 
     outputs = model.predict(
         model_input,
         verbose=0
     )
 
+
+    # -------------------------------------------------
+    # NEXT STATE
+    # -------------------------------------------------
+
     next_state = outputs[0][0]
 
+
+    # -------------------------------------------------
+    # ATTACK PROBABILITY
+    # -------------------------------------------------
+
     attack_probability = float(
-        outputs[1][0][0]
+        np.clip(
+            outputs[1][0][0],
+            0.0,
+            1.0
+        )
     )
+
+
+    # -------------------------------------------------
+    # ATTACK RATIO
+    # -------------------------------------------------
 
     attack_ratio = float(
-        outputs[2][0][0]
+        np.clip(
+            outputs[2][0][0],
+            0.0,
+            1.0
+        )
     )
 
-    stage_probabilities = outputs[3][0]
 
-    # --------------------------------------------------------
-    # Stage prediction
-    # --------------------------------------------------------
+    # -------------------------------------------------
+    # ATTACK STAGE
+    # -------------------------------------------------
+
+    stage_probabilities = (
+        outputs[3][0]
+    )
 
     stage_index = int(
-        np.argmax(stage_probabilities)
+        np.argmax(
+            stage_probabilities
+        )
     )
 
-    stage_label = stage_encoder.inverse_transform(
-        [stage_index]
-    )[0]
+    stage_label = (
+        stage_encoder
+        .inverse_transform(
+            [stage_index]
+        )[0]
+    )
 
     stage_confidence = float(
-        stage_probabilities[stage_index]
+        stage_probabilities[
+            stage_index
+        ]
     )
 
-    # --------------------------------------------------------
-    # Return results
-    # --------------------------------------------------------
 
     return {
-        "next_state": next_state.tolist(),
 
-        "attack_probability": attack_probability,
+        "next_state":
+            next_state.tolist(),
 
-        "attack_ratio": attack_ratio,
+        "attack_probability":
+            attack_probability,
 
-        "attack_stage": stage_label,
+        "attack_ratio":
+            attack_ratio,
 
-        "stage_confidence": stage_confidence,
+        "attack_stage":
+            str(stage_label),
 
-        "stage_probabilities": (
+        "stage_confidence":
+            stage_confidence,
+
+        "stage_probabilities":
             stage_probabilities.tolist()
-        )
+
     }
+
+
+# =====================================================
+# FIVE-STEP RECURSIVE FORECAST
+# =====================================================
+
+def forecast_future_states(
+    sequence,
+    steps=5
+):
+
+    """
+    Recursively forecast future network states.
+
+    Input:
+        sequence -> (20, 27)
+
+    Output:
+        t+1 ... t+steps
+    """
+
+
+    sequence = np.asarray(
+        sequence,
+        dtype=np.float32
+    )
+
+
+    # -------------------------------------------------
+    # VALIDATE
+    # -------------------------------------------------
+
+    if sequence.shape != (20, 27):
+
+        raise ValueError(
+            f"Expected sequence shape (20,27), "
+            f"got {sequence.shape}"
+        )
+
+
+    # -------------------------------------------------
+    # SCALE INITIAL WINDOW
+    # -------------------------------------------------
+
+    sequence_scaled = scaler.transform(
+        sequence
+    ).astype(
+        np.float32
+    )
+
+
+    predictions = []
+
+
+    # =================================================
+    # RECURSIVE LOOP
+    # =================================================
+
+    for step in range(steps):
+
+
+        # ---------------------------------------------
+        # MODEL INPUT
+        # ---------------------------------------------
+
+        model_input = np.expand_dims(
+            sequence_scaled,
+            axis=0
+        ).astype(
+            np.float32
+        )
+
+
+        # ---------------------------------------------
+        # MODEL PREDICTION
+        # ---------------------------------------------
+
+        outputs = model.predict(
+            model_input,
+            verbose=0
+        )
+
+
+        # ---------------------------------------------
+        # NEXT STATE
+        # ---------------------------------------------
+
+        next_state = np.asarray(
+            outputs[0][0],
+            dtype=np.float32
+        )
+
+
+        # ---------------------------------------------
+        # ATTACK PROBABILITY
+        # ---------------------------------------------
+
+        attack_probability = float(
+            np.clip(
+                np.asarray(
+                    outputs[1]
+                ).reshape(-1)[0],
+                0.0,
+                1.0
+            )
+        )
+
+
+        # ---------------------------------------------
+        # ATTACK RATIO
+        # ---------------------------------------------
+
+        attack_ratio = float(
+            np.clip(
+                np.asarray(
+                    outputs[2]
+                ).reshape(-1)[0],
+                0.0,
+                1.0
+            )
+        )
+
+
+        # ---------------------------------------------
+        # STAGE
+        # ---------------------------------------------
+
+        stage_probabilities = np.asarray(
+            outputs[3][0],
+            dtype=np.float32
+        ).reshape(-1)
+
+
+        stage_index = int(
+            np.argmax(
+                stage_probabilities
+            )
+        )
+
+
+        stage_label = (
+            stage_encoder
+            .inverse_transform(
+                [stage_index]
+            )[0]
+        )
+
+
+        stage_confidence = float(
+            stage_probabilities[
+                stage_index
+            ]
+        )
+
+
+        # ---------------------------------------------
+        # STORE
+        # ---------------------------------------------
+
+        predictions.append({
+
+            "step":
+                step + 1,
+
+            "attack_probability":
+                attack_probability,
+
+            "attack_ratio":
+                attack_ratio,
+
+            "attack_stage":
+                str(stage_label),
+
+            "stage_confidence":
+                stage_confidence,
+
+            "stage_probabilities":
+                stage_probabilities.tolist()
+
+        })
+
+
+        # ---------------------------------------------
+        # ROLL WINDOW
+        # ---------------------------------------------
+
+        sequence_scaled = np.vstack([
+
+            sequence_scaled[1:],
+
+            next_state
+
+        ]).astype(
+            np.float32
+        )
+
+
+    return predictions

@@ -3,18 +3,15 @@ __pycache__/
 *.py[cod]
 *.pyo
 
+# Datasets
+data/
+outputs/
+
 # Virtual environments
 venv/
 env/
 sih/
 .venv/
-
-# Datasets
-data/raw/
-data/procesed/*.csv
-
-# Generated outputs
-outputs/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -22,3 +19,6 @@ outputs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local environment
+.env
